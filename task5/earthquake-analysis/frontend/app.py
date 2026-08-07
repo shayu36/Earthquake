@@ -234,7 +234,7 @@ with tabs[3]:
             st.dataframe(gdf.nlargest(20, "count"), use_container_width=True, hide_index=True)
             fig = px.density_heatmap(gdf, x="lon_min", y="lat_min", z="count",
                                      nbinsx=36, nbinsy=18, color_continuous_scale="YlOrRd",
-                                     title="10x10 Grid Density")
+                                     title="10x10 Spatial Grid Event Count")
             fig.update_layout(height=500)
             st.plotly_chart(fig, use_container_width=True)
             fig.write_html(str(OUT_DIR / "html/grid_heatmap.html"), include_plotlyjs="cdn")
@@ -243,9 +243,9 @@ with tabs[3]:
 
     st.subheader("Three Fixed 10x10 Regions")
     FW = [
-        {"name": "Region A: Japan Trench",         "lat_min": 30, "lat_max": 40, "lon_min": 130, "lon_max": 140},
-        {"name": "Region B: S. America Subduction", "lat_min": -35, "lat_max": -25, "lon_min": -80, "lon_max": -70},
-        {"name": "Region C: SE Asia - Indonesia",   "lat_min": -10, "lat_max": 0, "lon_min": 95, "lon_max": 105},
+        {"name": "Window A", "lat_min": 25, "lat_max": 50, "lon_min": 125, "lon_max": 150},
+        {"name": "Window B", "lat_min": -60, "lat_max": 15, "lon_min": -85, "lon_max": -65},
+        {"name": "Window C", "lat_min": -15, "lat_max": 15, "lon_min": 90, "lon_max": 145},
     ]
     if st.button("Compare Three Regions"):
         try:

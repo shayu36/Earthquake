@@ -50,9 +50,8 @@ def test_grid_count_sum(df):
 
 def test_mag_bins_sum(df):
     """Sum of magnitude bins should equal total records."""
-    mag_bins = [4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 9.0]
-    mag_labels = ["4.5-5.0", "5.0-5.5", "5.5-6.0", "6.0-6.5",
-                  "6.5-7.0", "7.0-7.5", "7.5-8.0", "8.0-9.0"]
+    mag_bins = [4.5, 5.0, 6.0, 7.0, np.inf]
+    mag_labels = ["[4.5,5.0)", "[5.0,6.0)", "[6.0,7.0)", "[7.0,+inf)"]
     df = df.copy()
     df["mag_bin"] = pd.cut(df["mag"], bins=mag_bins, labels=mag_labels, right=False)
     assert df["mag_bin"].value_counts().sum() == 14953

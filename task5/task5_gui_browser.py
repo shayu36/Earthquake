@@ -270,6 +270,16 @@ class EarthquakeBrowser:
 
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
 
+        # Page navigation
+        nav_frame = ttk.Frame(panel)
+        nav_frame.pack(fill=tk.X, padx=2, pady=(3, 0))
+        self.btn_prev = ttk.Button(nav_frame, text="◀ Prev", command=self._page_prev, state=tk.DISABLED)
+        self.btn_prev.pack(side=tk.LEFT, padx=2)
+        self.lbl_page = ttk.Label(nav_frame, text="", font=("", 8))
+        self.lbl_page.pack(side=tk.LEFT, padx=6)
+        self.btn_next = ttk.Button(nav_frame, text="Next ▶", command=self._page_next, state=tk.DISABLED)
+        self.btn_next.pack(side=tk.LEFT, padx=2)
+
     # ── Status Bar ──
     def _build_statusbar(self):
         self.status_var = tk.StringVar(value="Ready")
@@ -289,9 +299,11 @@ class EarthquakeBrowser:
                           (self.df["depth"] <= self.var_depth_max.get())]
         if self.var_magtype.get() != "All":
             self.df = self.df[self.df["magType"] == self.var_magtype.get()]
+        self._table_page = 0
         self._update_display()
 
     def _reset_filters(self):
+        self._table_page = 0
         self.var_time_from.set("2024-01-01")
         self.var_time_to.set("2025-12-31")
         self.var_mag_min.set(4.5)
@@ -381,7 +393,7 @@ class EarthquakeBrowser:
             self.ax = self.fig.add_subplot(111)
             if n > 0:
                 monthly = self.df.groupby("year_month").size()
-                full_months = pd.period_range("2024-01", "2025-12", freq="M")
+                full_months = pd.period_range("2024-01", "2025-12", freq="M").astype(str)
                 monthly = monthly.reindex(full_months, fill_value=0)
                 monthly.index = monthly.index.astype(str)
                 x = np.arange(len(monthly))
@@ -400,7 +412,19 @@ class EarthquakeBrowser:
     # ── Table ──
     def _update_table(self):
         self.tree.delete(*self.tree.get_children())
-        for _, row in self.df.head(50).iterrows():
+        self._table_page = getattr(self, "_table_page", 0)
+        rows_per_page = 50
+        total = len(self.df)
+        total_pages = max(1, (total + rows_per_page - 1) // rows_per_page)
+        # Clamp page
+        if self._table_page >= total_pages:
+            self._table_page = total_pages - 1
+        if self._table_page < 0:
+            self._table_page = 0
+        start = self._table_page * rows_per_page
+        end = min(start + rows_per_page, total)
+
+        for _, row in self.df.iloc[start:end].iterrows():
             event_id = str(row["id"])
             self.tree.insert("", tk.END, iid=event_id, values=(
                 row["time"].strftime("%Y-%m-%d %H:%M"),
@@ -409,6 +433,20 @@ class EarthquakeBrowser:
                 row.get("magType", ""),
                 row["place"],
             ))
+        self.lbl_page.config(
+            text=f"Page {self._table_page + 1}/{total_pages}  "
+                 f"({start + 1}–{end} of {total})"
+        )
+        self.btn_prev.config(state=tk.NORMAL if self._table_page > 0 else tk.DISABLED)
+        self.btn_next.config(state=tk.NORMAL if self._table_page < total_pages - 1 else tk.DISABLED)
+
+    def _page_prev(self):
+        self._table_page = getattr(self, "_table_page", 0) - 1
+        self._update_table()
+
+    def _page_next(self):
+        self._table_page = getattr(self, "_table_page", 0) + 1
+        self._update_table()
 
     # ── Click / Select ──
     def _on_scatter_click(self, event):

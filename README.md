@@ -50,7 +50,7 @@ USGS ANSS Comprehensive Earthquake Catalog (ComCat) — 2024-2025, M ≥ 4.5.
 Web application dependencies（root scripts only need pandas/numpy/matplotlib/scikit-learn）:
 
 ```bash
-pip install -r earthquake-analysis/requirements.txt
+pip install -r task5/earthquake-analysis/requirements.txt
 ```
 
 ### 2. Run Individual Tasks
