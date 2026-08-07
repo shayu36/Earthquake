@@ -8,8 +8,14 @@ numerical boundaries, and missing quality fields, then export results.
 
 Data source: USGS ANSS Comprehensive Earthquake Catalog (ComCat)
 Time range: 2024-01-01 to 2025-12-31, M >= 4.5
+
+Usage:
+    python task1_data_validation.py
+    python task1_data_validation.py --input path/to/data.csv --output-dir ./outputs
 """
 
+import argparse
+import hashlib
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -27,10 +33,27 @@ if sys.platform == "win32":
 # ============================================================
 # 0. 路径与参数
 # ============================================================
-DATA_DIR = Path(r"D:\Users\lenovo\Desktop\题目2_USGS地震数据")
-INPUT_CSV = DATA_DIR / "USGS_2024_2025_M4.5plus_earthquakes.csv"
-OUTPUT_CSV = DATA_DIR / "task1_processed_data.csv"
-VALIDATION_LOG = DATA_DIR / "task1_validation_results.txt"
+BASE_DIR = Path(__file__).resolve().parent
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Task 1: Data Reading and Quality Validation"
+    )
+    parser.add_argument(
+        "--input",
+        type=Path,
+        default=BASE_DIR / "USGS_2024_2025_M4.5plus_earthquakes.csv",
+        help="Path to input CSV file",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=BASE_DIR,
+        help="Directory for output files",
+    )
+    return parser.parse_args()
+
 
 EXPECTED_START = pd.Timestamp("2024-01-01T00:00:00.000Z")
 EXPECTED_END   = pd.Timestamp("2025-12-31T23:59:59.999Z")
@@ -44,6 +67,18 @@ def log(msg: str, f=None):
 
 
 # ============================================================
+# SHA-256 计算
+# ============================================================
+def calculate_sha256(path: Path) -> str:
+    """Dynamically compute SHA-256 hash of the input file."""
+    sha256 = hashlib.sha256()
+    with path.open("rb") as file:
+        for block in iter(lambda: file.read(1024 * 1024), b""):
+            sha256.update(block)
+    return sha256.hexdigest().upper()
+
+
+# ============================================================
 # 1. 读取 CSV
 # ============================================================
 def read_and_prepare(path: Path):
@@ -51,7 +86,6 @@ def read_and_prepare(path: Path):
     df = pd.read_csv(path)
     df["time"]    = pd.to_datetime(df["time"],    utc=True)
     df["updated"] = pd.to_datetime(df["updated"], utc=True)
-    # 排序（虽然文档说已按时间升序，但显式排一次）
     df = df.sort_values("time").reset_index(drop=True)
     return df
 
@@ -232,38 +266,42 @@ def validate_quality_missing(df, f):
                     "nst", "dmin", "magNst", "magType"]
 
     missing_summary = {}
+    warnings_list = []
     for col in quality_cols:
         miss = df[col].isna().sum()
         pct  = miss / len(df) * 100
         missing_summary[col] = {"missing": miss, "pct": round(pct, 2)}
         status = "⚠" if miss > 0 else "✓"
         log(f"  {status} {col:20s}: 缺失 {miss:5d} / {len(df)} ({pct:.2f}%)", f)
+        if miss > 0:
+            warnings_list.append(f"质量字段 {col} 缺失 {miss} 条 ({pct:.2f}%)")
 
     log("\n  --- 关键说明 ---", f)
     log("  缺失值不得填 0（说明文件中已注明）。本次处理保留缺失值不填充。", f)
 
-    return missing_summary
+    return missing_summary, warnings_list
 
 
 # ============================================================
 # 6. 导出结果
 # ============================================================
-def export_results(df, stats, missing_summary):
+def export_results(df, stats, missing_summary, output_dir):
     """导出处理后的 CSV 和验证统计结果。"""
-    # (a) 处理后的数据（保留原始数据，添加一个 clean 标记列）
+    # (a) 处理后的数据
     df_out = df.copy()
-    df_out.to_csv(OUTPUT_CSV, index=False, encoding="utf-8-sig")
-    print(f"\n✓ 处理后数据已导出: {OUTPUT_CSV}")
+    output_csv = output_dir / "task1_processed_data.csv"
+    df_out.to_csv(output_csv, index=False, encoding="utf-8-sig")
+    print(f"\n✓ 处理后数据已导出: {output_csv}")
 
     # (b) 缺失统计 CSV
     missing_df = pd.DataFrame(missing_summary).T
     missing_df.index.name = "field"
-    missing_csv = DATA_DIR / "task1_missing_summary.csv"
+    missing_csv = output_dir / "task1_missing_summary.csv"
     missing_df.to_csv(missing_csv, encoding="utf-8-sig")
     print(f"✓ 缺失统计已导出: {missing_csv}")
 
     # (c) 数值统计 CSV
-    stats_csv = DATA_DIR / "task1_numerical_stats.csv"
+    stats_csv = output_dir / "task1_numerical_stats.csv"
     stats.to_csv(stats_csv, encoding="utf-8-sig")
     print(f"✓ 数值统计已导出: {stats_csv}")
 
@@ -272,24 +310,37 @@ def export_results(df, stats, missing_summary):
 # 主流程
 # ============================================================
 def main():
+    args = parse_args()
+    input_csv = args.input
+    output_dir = args.output_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
+    validation_log = output_dir / "task1_validation_results.txt"
+
+    if not input_csv.exists():
+        print(f"错误: 找不到输入文件 {input_csv}")
+        sys.exit(1)
+
     print("=" * 60)
     print("任务 1：数据读取与质量验证")
     print("USGS 2024-2025 M4.5+ Earthquakes")
     print("=" * 60)
 
+    # 计算文件哈希
+    file_sha256 = calculate_sha256(input_csv)
+
     # 打开日志文件
-    with open(VALIDATION_LOG, "w", encoding="utf-8") as f:
+    with open(validation_log, "w", encoding="utf-8") as f:
         log(f"验证时间: {pd.Timestamp.now()}", f)
-        log(f"输入文件: {INPUT_CSV}", f)
-        log(f"SHA-256: 5E623C1B9E5925E8CAFF6A7C3DCFDE4C087FBCCF285664ABE6A05D218C6B8232", f)
+        log(f"输入文件: {input_csv}", f)
+        log(f"SHA-256: {file_sha256}", f)
 
         # --- Step 1: 读取 ---
         log("\n" + "=" * 60, f)
         log("1. 读取 CSV", f)
         log("=" * 60, f)
-        log(f"  文件路径: {INPUT_CSV}", f)
+        log(f"  文件路径: {input_csv}", f)
 
-        df = read_and_prepare(INPUT_CSV)
+        df = read_and_prepare(input_csv)
         log(f"  记录总数: {len(df)}", f)
         log(f"  字段数量: {len(df.columns)}", f)
         log(f"  字段列表: {list(df.columns)}", f)
@@ -307,30 +358,38 @@ def main():
         issues_4, stats = validate_numerical_bounds(df, f)
 
         # --- Step 5: 缺失 ---
-        missing_summary = validate_quality_missing(df, f)
+        missing_summary, quality_warnings = validate_quality_missing(df, f)
 
         # --- 汇总 ---
-        all_issues = issues_2 + issues_3 + issues_4
+        core_issues = issues_2 + issues_3 + issues_4
         log("\n" + "=" * 60, f)
         log("总  结", f)
         log("=" * 60, f)
-        if all_issues:
-            log(f"  共发现 {len(all_issues)} 个问题:", f)
-            for i, iss in enumerate(all_issues, 1):
+
+        if core_issues:
+            log(f"  ⚠ 核心验证共发现 {len(core_issues)} 个问题:", f)
+            for i, iss in enumerate(core_issues, 1):
                 log(f"    {i}. {iss}", f)
         else:
-            log("  ✓ 所有验证项通过，数据质量良好！", f)
+            log("  ✓ 核心筛选与边界验证全部通过！", f)
+
+        if quality_warnings:
+            log(f"\n  ⚠ 质量字段存在 {len(quality_warnings)} 项缺失（不影响数据使用）:", f)
+            for i, w in enumerate(quality_warnings, 1):
+                log(f"    {i}. {w}", f)
+        else:
+            log("  ✓ 质量字段无缺失", f)
 
         log(f"\n  最终记录数: {len(df)}", f)
         log(f"  字段数: {len(df.columns)}", f)
 
     # --- 导出 ---
-    export_results(df, stats, missing_summary)
+    export_results(df, stats, missing_summary, output_dir)
 
     print("\n" + "=" * 60)
     print("任务 1 完成！")
-    print(f"验证日志: {VALIDATION_LOG}")
-    print(f"处理后数据: {OUTPUT_CSV}")
+    print(f"验证日志: {validation_log}")
+    print(f"处理后数据: {output_dir / 'task1_processed_data.csv'}")
     print("=" * 60)
 
 

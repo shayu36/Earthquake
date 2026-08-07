@@ -7,13 +7,18 @@ Features:
   - Filter by time range, magnitude, depth
   - Global map display with embedded matplotlib
   - Click on map points to view details
-  - Data table with scrollable results
+  - Data table with scrollable results (selection uses unique event ID)
   - Stats summary panel
   - Export filtered data
 
 Built with: Tkinter + matplotlib (no extra installs needed)
+
+Usage:
+    python task5_gui_browser.py
+    python task5_gui_browser.py --input task1_processed_data.csv
 """
 
+import argparse
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import pandas as pd
@@ -35,19 +40,24 @@ plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
 
 # ── Paths ──
-DATA_DIR = Path(r"D:\Users\lenovo\Desktop\题目2_USGS地震数据")
-INPUT_CSV = DATA_DIR / "task1_processed_data.csv"
-
-# ── Load data ──
-@pd.api.extensions.register_dataframe_accessor("quake")
-class QuakeAccessor:
-    """Cache-enabled accessor for filtered earthquake data."""
-    def __init__(self, pandas_obj):
-        self._obj = pandas_obj
+BASE_DIR = Path(__file__).resolve().parent
 
 
-def load_data():
-    df = pd.read_csv(INPUT_CSV)
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Task 5: Interactive GUI Earthquake Data Browser"
+    )
+    parser.add_argument(
+        "--input",
+        type=Path,
+        default=BASE_DIR / "task1_processed_data.csv",
+        help="Path to processed CSV (from task 1)",
+    )
+    return parser.parse_args()
+
+
+def load_data(path):
+    df = pd.read_csv(path)
     df["time"] = pd.to_datetime(df["time"], utc=True, format="ISO8601")
     df["year"] = df["time"].dt.year
     df["month"] = df["time"].dt.month
@@ -55,19 +65,38 @@ def load_data():
 
 
 # ================================================================
+# Date filter helper (extracted for testability)
+# ================================================================
+def filter_by_date(df, start_date_str, end_date_str):
+    """
+    Filter dataframe by date range. The end date is INCLUSIVE —
+    includes all records on end_date (up to 23:59:59.999).
+
+    Returns filtered dataframe.
+    """
+    start = pd.Timestamp(start_date_str, tz="UTC")
+    # End date is exclusive of the NEXT day, so all of end_date is included
+    end_exclusive = pd.Timestamp(end_date_str, tz="UTC") + pd.Timedelta(days=1)
+
+    return df[(df["time"] >= start) & (df["time"] < end_exclusive)]
+
+
+# ================================================================
 # Main Application
 # ================================================================
 class EarthquakeBrowser:
-    def __init__(self, root):
+    def __init__(self, root, data_path):
         self.root = root
         self.root.title("Earthquake Data Browser — USGS 2024-2025 M>=4.5")
         self.root.geometry("1400x900")
         self.root.minsize(1100, 700)
 
+        self.data_path = data_path
+
         # Load data
-        self.df_full = load_data()
+        self.df_full = load_data(data_path)
         self.df = self.df_full.copy()
-        self.selected_index = None
+        self.selected_id = None
 
         # Style
         self.style = ttk.Style()
@@ -92,14 +121,14 @@ class EarthquakeBrowser:
         title.pack(pady=(5, 10))
 
         # --- Time filter ---
-        frm_time = ttk.LabelFrame(panel, text="Time Range", padding=8)
+        frm_time = ttk.LabelFrame(panel, text="Time Range (inclusive)", padding=8)
         frm_time.pack(fill=tk.X, padx=5, pady=3)
 
         ttk.Label(frm_time, text="From (YYYY-MM-DD):").pack(anchor=tk.W)
         self.var_time_from = tk.StringVar(value="2024-01-01")
         ttk.Entry(frm_time, textvariable=self.var_time_from, width=22).pack(fill=tk.X, pady=2)
 
-        ttk.Label(frm_time, text="To (YYYY-MM-DD):").pack(anchor=tk.W)
+        ttk.Label(frm_time, text="To (YYYY-MM-DD, inclusive):").pack(anchor=tk.W)
         self.var_time_to = tk.StringVar(value="2025-12-31")
         ttk.Entry(frm_time, textvariable=self.var_time_to, width=22).pack(fill=tk.X, pady=2)
 
@@ -175,11 +204,9 @@ class EarthquakeBrowser:
         self.canvas = FigureCanvasTkAgg(self.fig, master=map_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
-        # Toolbar
         toolbar = NavigationToolbar2Tk(self.canvas, map_frame)
         toolbar.update()
 
-        # Click event
         self.canvas.mpl_connect("button_press_event", self._on_map_click)
 
     # ── Detail Panel (right) ──
@@ -192,12 +219,10 @@ class EarthquakeBrowser:
         ttk.Label(panel, text="Click a point on the map to view details",
                   font=("", 9), foreground="gray").pack()
 
-        # Text widget for details
         self.txt_detail = tk.Text(panel, width=42, height=18, font=("Consolas", 10),
                                    wrap=tk.WORD, relief=tk.SUNKEN, borderwidth=1)
         self.txt_detail.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        # Scrollbar
         scroll = ttk.Scrollbar(self.txt_detail, command=self.txt_detail.yview)
         scroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.txt_detail.config(yscrollcommand=scroll.set)
@@ -236,13 +261,12 @@ class EarthquakeBrowser:
 
     # ── Apply / Reset Filters ──
     def _apply_filters(self):
-        self.df = self.df_full.copy()
-
-        # Time
         try:
-            t_from = pd.Timestamp(self.var_time_from.get()).tz_localize("UTC")
-            t_to   = pd.Timestamp(self.var_time_to.get()).tz_localize("UTC")
-            self.df = self.df[(self.df["time"] >= t_from) & (self.df["time"] <= t_to)]
+            self.df = filter_by_date(
+                self.df_full,
+                self.var_time_from.get(),
+                self.var_time_to.get(),
+            )
         except Exception as e:
             messagebox.showerror("Invalid Date", f"Date format error: {e}")
             return
@@ -273,7 +297,7 @@ class EarthquakeBrowser:
         path = filedialog.asksaveasfilename(
             defaultextension=".csv",
             filetypes=[("CSV files", "*.csv")],
-            initialdir=str(DATA_DIR),
+            initialdir=str(BASE_DIR),
             initialfile="filtered_data.csv"
         )
         if path:
@@ -346,7 +370,7 @@ class EarthquakeBrowser:
         self.ax.set_title(f"Earthquake Epicenters (n={n})", fontsize=12, fontweight="bold")
         self.ax.grid(True, alpha=0.3, linestyle="--")
 
-        # Colorbar (remove old, add new)
+        # Colorbar
         if hasattr(self, "_cbar") and self._cbar is not None:
             self._cbar.remove()
         self._cbar = self.fig.colorbar(self.scatter, ax=self.ax, shrink=0.75, pad=0.02)
@@ -357,13 +381,17 @@ class EarthquakeBrowser:
 
     def _update_table(self):
         self.tree.delete(*self.tree.get_children())
+        # Store id mapping: tree iid -> event id
+        self._tree_id_map = {}
         for _, row in self.df.head(20).iterrows():
-            self.tree.insert("", tk.END, values=(
+            event_id = str(row["id"])
+            self.tree.insert("", tk.END, iid=event_id, values=(
                 row["time"].strftime("%Y-%m-%d %H:%M"),
                 f"{row['mag']:.1f}",
                 f"{row['depth']:.0f}",
                 row["place"]
             ))
+            self._tree_id_map[event_id] = event_id
 
     # ── Map Click Handler ──
     def _on_map_click(self, event):
@@ -372,7 +400,7 @@ class EarthquakeBrowser:
         if event.xdata is None or event.ydata is None:
             return
 
-        # Find nearest point
+        # Find nearest point in the plotted sample
         lon_click, lat_click = event.xdata, event.ydata
         plot_df = self._plot_df
         distances = np.sqrt(
@@ -382,26 +410,19 @@ class EarthquakeBrowser:
         nearest_idx = distances.idxmin()
         row = plot_df.loc[nearest_idx]
 
-        # Now find it in the full filtered df for complete details
-        full_row = self.df.loc[nearest_idx] if nearest_idx in self.df.index else row
-
-        self._show_detail(full_row)
+        # Look up the full event by its unique ID
+        event_id = str(row["id"])
+        matches = self.df[self.df["id"].astype(str) == event_id]
+        if len(matches) > 0:
+            self._show_detail(matches.iloc[0])
 
     def _on_tree_select(self, event):
         selection = self.tree.selection()
         if not selection:
             return
-        idx = selection[0]
-        # The tree shows first 20 — match by time string
-        values = self.tree.item(idx)["values"]
-        time_str = values[0]
-        mag_str = values[1]
-
-        # Find in filtered df
-        matches = self.df[
-            (self.df["time"].dt.strftime("%Y-%m-%d %H:%M") == time_str) &
-            (self.df["mag"].round(1) == float(mag_str))
-        ]
+        # selection gives the iid, which we set to the event ID
+        event_id = selection[0]
+        matches = self.df[self.df["id"].astype(str) == event_id]
         if len(matches) > 0:
             self._show_detail(matches.iloc[0])
 
@@ -449,8 +470,9 @@ class EarthquakeBrowser:
 # Main
 # ================================================================
 def main():
+    args = parse_args()
     root = tk.Tk()
-    app = EarthquakeBrowser(root)
+    app = EarthquakeBrowser(root, args.input)
     root.mainloop()
 
 

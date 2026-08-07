@@ -22,11 +22,15 @@ async def upload_catalog(file: UploadFile = File(...)):
     if len(content) > max_size:
         raise HTTPException(status_code=413, detail="File exceeds 50 MB limit.")
 
-    RAW_CSV_PATH.write_bytes(content)
+    # Step 1: Validate the uploaded CSV FIRST (don't overwrite raw yet)
     try:
         verification = catalog_service.load_uploaded_bytes(content)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    # Step 2: Only after validation passes, write to disk
+    RAW_CSV_PATH.write_bytes(content)
+    catalog_service.save_processed()
 
     return {
         "message": "CSV uploaded and processed successfully.",
@@ -87,9 +91,10 @@ def get_events(
     if place_keyword:
         result = result[result["place"].fillna("").str.contains(place_keyword, case=False, regex=False)]
 
+    # Left-closed, right-open for lat/lon bounds to avoid double counting
     result = result[
-        result["latitude"].between(lat_min, lat_max)
-        & result["longitude"].between(lon_min, lon_max)
+        (result["latitude"] >= lat_min) & (result["latitude"] < lat_max)
+        & (result["longitude"] >= lon_min) & (result["longitude"] < lon_max)
     ]
 
     total = len(result)

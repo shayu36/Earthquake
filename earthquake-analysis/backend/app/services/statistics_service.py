@@ -53,16 +53,30 @@ class StatisticsService:
         return annual.to_dict(orient="records")
 
     def get_grid(self, grid_size: float = 10.0) -> list[dict[str, Any]]:
+        """Generate grid with left-closed, right-open intervals to avoid
+        double-counting on boundaries. The last row/column includes the
+        upper bound (90°, 180°) to capture edge cases."""
         df = self._df()
         rows = []
-        for lat_start in range(-90, 90, int(grid_size)):
-            for lon_start in range(-180, 180, int(grid_size)):
-                lat_end = lat_start + grid_size
-                lon_end = lon_start + grid_size
-                mask = (
-                    df["latitude"].between(lat_start, lat_end)
-                    & df["longitude"].between(lon_start, lon_end)
-                )
+        gs = int(grid_size)
+        for lat_start in range(-90, 90, gs):
+            for lon_start in range(-180, 180, gs):
+                lat_end = lat_start + gs
+                lon_end = lon_start + gs
+
+                # Left-closed, right-open for interior cells
+                # Last row / column: include the boundary value
+                if lat_end >= 90:
+                    mask_lat = (df["latitude"] >= lat_start) & (df["latitude"] <= lat_end)
+                else:
+                    mask_lat = (df["latitude"] >= lat_start) & (df["latitude"] < lat_end)
+
+                if lon_end >= 180:
+                    mask_lon = (df["longitude"] >= lon_start) & (df["longitude"] <= lon_end)
+                else:
+                    mask_lon = (df["longitude"] >= lon_start) & (df["longitude"] < lon_end)
+
+                mask = mask_lat & mask_lon
                 subset = df[mask]
                 cnt = len(subset)
                 if cnt > 0:
@@ -87,9 +101,10 @@ class StatisticsService:
             raise ValueError("lon_min must be less than lon_max")
 
         df = self._df()
+        # Left-closed, right-open intervals
         subset = df[
-            df["latitude"].between(lat_min, lat_max, inclusive="both")
-            & df["longitude"].between(lon_min, lon_max, inclusive="both")
+            (df["latitude"] >= lat_min) & (df["latitude"] < lat_max)
+            & (df["longitude"] >= lon_min) & (df["longitude"] < lon_max)
         ].copy()
 
         if subset.empty:

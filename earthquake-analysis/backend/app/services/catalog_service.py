@@ -56,12 +56,23 @@ class CatalogService:
         return df
 
     def load_uploaded_bytes(self, content: bytes) -> dict[str, Any]:
+        """Validate uploaded CSV bytes BEFORE overwriting raw data.
+
+        Returns verification dict. Caller should only write to disk
+        after this returns successfully.
+        """
         df = self._read_dataframe(io.BytesIO(content))
         df = df.sort_values("time", ascending=True).reset_index(drop=True)
-        self.verification = self._verify_dataframe(df)
+        verification = self._verify_dataframe(df)
+        # Only update internal state after successful validation
+        self.verification = verification
         self.df = df
-        df.to_csv(self.processed_path, index=False, encoding="utf-8-sig")
-        return self.verification
+        return verification
+
+    def save_processed(self) -> None:
+        """Persist current dataframe to processed CSV path."""
+        if self.df is not None:
+            self.df.to_csv(self.processed_path, index=False, encoding="utf-8-sig")
 
     @staticmethod
     def _verify_dataframe(df: pd.DataFrame) -> dict[str, Any]:
@@ -103,14 +114,22 @@ class CatalogService:
             "missing_quality_fields": missing_quality,
         }
 
-        result["verification_passed"] = bool(
-            result["time_range_valid"]
-            and result["id_duplicate_count"] == 0
-            and result["latitude_invalid_count"] == 0
-            and result["longitude_invalid_count"] == 0
-            and result["magnitude_below_4_5_count"] == 0
-            and result["non_earthquake_type_count"] == 0
-        )
+        # Full verification: ALL checks must pass
+        result["verification_passed"] = all([
+            result["record_count_matches"],
+            result["time_missing_count"] == 0,
+            result["updated_missing_count"] == 0,
+            result["time_range_valid"],
+            result["id_missing_count"] == 0,
+            result["id_duplicate_count"] == 0,
+            result["full_row_duplicate_count"] == 0,
+            result["latitude_invalid_count"] == 0,
+            result["longitude_invalid_count"] == 0,
+            result["magnitude_below_4_5_count"] == 0,
+            result["non_earthquake_type_count"] == 0,
+            result["negative_depth_count"] == 0,
+            result["time_ascending"],
+        ])
 
         return result
 
