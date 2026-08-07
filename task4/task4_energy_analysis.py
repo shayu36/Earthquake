@@ -175,7 +175,7 @@ def main():
                  xytext=(0, 12), ha="center", fontsize=9, color="#4A90D9", fontweight="bold")
     ymax_e = monthly["energy_pct"].max()
     xmax_e = monthly["energy_pct"].values.argmax()
-    ax1.annotate(f"Highest energy: {months[xmax_e]}\n({ymax_e:.1f}%)",
+    ax2.annotate(f"Highest energy: {months[xmax_e]}\n({ymax_e:.1f}%)",
                  (xmax_e, ymax_e), textcoords="offset points",
                  xytext=(0, -20), ha="center", fontsize=9, color="#E0554A", fontweight="bold")
     ax1.set_title("Monthly Event Count vs Relative Energy Index", fontsize=15, fontweight="bold")

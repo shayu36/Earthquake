@@ -9,14 +9,14 @@ USGS ANSS Comprehensive Earthquake Catalog (ComCat) — 2024-2025, M ≥ 4.5.
 ├── USGS_2024_2025_M4.5plus_earthquakes.csv   # Raw data (14,953 records)
 ├── 数据说明.txt                                # Data description
 │
-├── task1_data_validation.py                   # Task 1: Data reading & validation
-├── task2_temporal_analysis.py                 # Task 2: Temporal statistics
-├── task3_spatial_analysis.py                  # Task 3: Spatial distribution
-├── task4_energy_analysis.py                   # Task 4: Top events & energy
-├── task5_gui_browser.py                       # Task 5: Tkinter GUI browser
-├── task6_ml_analysis.py                       # Task 6: DBSCAN + PCA
+├── task1/task1_data_validation.py              # Task 1: Data reading & validation
+├── task2/task2_temporal_analysis.py            # Task 2: Temporal statistics
+├── task3/task3_spatial_analysis.py             # Task 3: Spatial distribution
+├── task4/task4_energy_analysis.py              # Task 4: Top events & energy
+├── task5/task5_gui_browser.py                  # Task 5: Tkinter GUI browser
+├── task6/task6_ml_analysis.py                  # Task 6: DBSCAN + PCA
 │
-├── earthquake-analysis/                       # Web application
+├── task5/earthquake-analysis/                 # Web application (FastAPI + Streamlit)
 │   ├── backend/                               # FastAPI backend
 │   │   └── app/
 │   │       ├── main.py                        # API entry point
@@ -59,28 +59,28 @@ All scripts accept `--input` and `--output-dir` arguments (defaults are relative
 
 ```bash
 # Task 1: Data validation
-python task1_data_validation.py
+python task1/task1_data_validation.py
 
 # Task 2: Temporal analysis
-python task2_temporal_analysis.py
+python task2/task2_temporal_analysis.py
 
 # Task 3: Spatial analysis
-python task3_spatial_analysis.py
+python task3/task3_spatial_analysis.py
 
 # Task 4: Energy analysis
-python task4_energy_analysis.py
+python task4/task4_energy_analysis.py
 
 # Task 5: GUI browser (interactive)
-python task5_gui_browser.py
+python task5/task5_gui_browser.py
 
 # Task 6: ML analysis (DBSCAN + PCA)
-python task6_ml_analysis.py
+python task6/task6_ml_analysis.py
 ```
 
 With custom paths:
 
 ```bash
-python task1_data_validation.py --input data/my_earthquakes.csv --output-dir ./outputs
+python task1/task1_data_validation.py --input my_data.csv --output-dir ./task1
 ```
 
 ### 3. Run Web Application
@@ -88,11 +88,11 @@ python task1_data_validation.py --input data/my_earthquakes.csv --output-dir ./o
 #### One-click launcher (recommended)
 
 ```bash
-cd earthquake-analysis
+cd task5/earthquake-analysis
 python start_gui.py
 ```
 
-Or double-click `earthquake-analysis/启动地震分析系统.bat` on Windows.
+Or double-click `task5/earthquake-analysis/启动地震分析系统.bat` on Windows.
 
 This automatically starts FastAPI backend + Streamlit frontend and opens the browser.
 Press `Ctrl+C` to stop both services.
@@ -101,11 +101,11 @@ Press `Ctrl+C` to stop both services.
 
 ```bash
 # Terminal 1: Start backend
-cd earthquake-analysis
+cd task5/earthquake-analysis
 uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
 
 # Terminal 2: Start frontend
-cd earthquake-analysis
+cd task5/earthquake-analysis
 streamlit run frontend/app.py --server.port 8501
 ```
 
@@ -139,7 +139,7 @@ pytest tests/ -v
 - **DBSCAN**: Uses Haversine (great-circle) distance for correct global spatial clustering
 - **K-Means**: Converts (lat, lon) to 3D unit-sphere coordinates to handle spherical geometry
 - **Grid statistics**: Left-closed, right-open intervals to avoid double-counting on boundaries
-- **Energy index**: E ∝ 10^(1.5M), normalized as percentage of total
+- **Energy index**: E_rel = 10^(1.5×(M−4.5)), M=4.5 → 1.0 (proxy index, not joules)
 
 ## License
 
