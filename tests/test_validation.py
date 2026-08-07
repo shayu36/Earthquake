@@ -8,7 +8,7 @@ import pytest
 # Add parent dir to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from task1_data_validation import (
+from task1.task1_data_validation import (
     read_and_prepare,
     calculate_sha256,
     validate_ranges,

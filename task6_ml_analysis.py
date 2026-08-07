@@ -373,6 +373,13 @@ def main():
     cluster_df.to_csv(OUTPUT_DIR / "task6_dbscan_clusters.csv", index=False, encoding="utf-8-sig")
     print("  -> Saved: task6_dbscan_clusters.csv")
 
+    # --- Export labeled events CSV (each earthquake with its DBSCAN label) ---
+    labeled_df = df[["time", "latitude", "longitude", "depth", "mag", "magType", "place", "id"]].copy()
+    labeled_df["dbscan_cluster"] = best_labels
+    labeled_df["dbscan_is_noise"] = (best_labels == -1)
+    labeled_df.to_csv(OUTPUT_DIR / "task6_dbscan_labeled_events.csv", index=False, encoding="utf-8-sig")
+    print("  -> Saved: task6_dbscan_labeled_events.csv")
+
     # Print cluster details
     print(f"\n  Top clusters (Haversine DBSCAN, eps={best_eps} km, min_samples={best_min_samples}):")
     for _, c in cluster_df.head(8).iterrows():
@@ -495,6 +502,7 @@ def main():
     print("  task6_dbscan_params.csv      - Full parameter comparison table")
     print("  task6_dbscan_clustering.png  - k-distance + heatmaps + cluster map + bar chart")
     print("  task6_dbscan_clusters.csv    - Per-cluster statistics")
+    print("  task6_dbscan_labeled_events.csv  - All events with cluster labels")
     print("  task6_pca_analysis.png       - Scree plot + biplot")
     print("  task6_pca_loadings.csv       - Feature loadings per PC")
 

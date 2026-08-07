@@ -37,17 +37,20 @@ USGS ANSS Comprehensive Earthquake Catalog (ComCat) — 2024-2025, M ≥ 4.5.
 ├── tests/                                     # Unit tests
 │   ├── test_validation.py
 │   ├── test_statistics.py
-│   └── test_api.py
+│   └── test_gui_date_filter.py
 │
-└── requirements.txt                           # Python dependencies
+└── requirements.txt                           # Root Python dependencies
+```
 ```
 
 ## Quick Start
 
 ### 1. Install Dependencies
 
+Web application dependencies（root scripts only need pandas/numpy/matplotlib/scikit-learn）:
+
 ```bash
-pip install -r requirements.txt
+pip install -r earthquake-analysis/requirements.txt
 ```
 
 ### 2. Run Individual Tasks
@@ -82,16 +85,29 @@ python task1_data_validation.py --input data/my_earthquakes.csv --output-dir ./o
 
 ### 3. Run Web Application
 
+#### One-click launcher (recommended)
+
+```bash
+cd earthquake-analysis
+python start_gui.py
+```
+
+Or double-click `earthquake-analysis/启动地震分析系统.bat` on Windows.
+
+This automatically starts FastAPI backend + Streamlit frontend and opens the browser.
+Press `Ctrl+C` to stop both services.
+
+#### Manual start (two terminals)
+
 ```bash
 # Terminal 1: Start backend
 cd earthquake-analysis
 uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
 
 # Terminal 2: Start frontend
-streamlit run earthquake-analysis/frontend/app.py --server.port 8501
+cd earthquake-analysis
+streamlit run frontend/app.py --server.port 8501
 ```
-
-Then open http://localhost:8501 in your browser.
 
 ### 4. Run Tests
 

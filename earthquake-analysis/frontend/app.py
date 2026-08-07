@@ -113,28 +113,72 @@ with tabs[1]:
     st.subheader("Earthquake Catalog Browser")
     fc1, fc2, fc3 = st.columns(3)
     with fc1:
-        sd = st.date_input("Start Date", value=date(2024, 1, 1))
-        ed = st.date_input("End Date", value=date(2025, 12, 31))
+        sd = st.date_input("Start Date", value=date(2024, 1, 1), key="cat_sd")
+        ed = st.date_input("End Date", value=date(2025, 12, 31), key="cat_ed")
     with fc2:
-        min_m = st.number_input("Min Mag", 4.5, value=4.5, step=0.1)
-        max_m = st.number_input("Max Mag", 4.5, value=9.5, step=0.1)
+        min_m = st.number_input("Min Mag", 4.5, value=4.5, step=0.1, key="cat_minm")
+        max_m = st.number_input("Max Mag", 4.5, value=9.5, step=0.1, key="cat_maxm")
     with fc3:
-        min_d = st.number_input("Min Depth (km)", value=-10.0)
-        max_d = st.number_input("Max Depth (km)", value=800.0)
-    kw = st.text_input("Place keyword (not for country stats)")
-    ps = st.selectbox("Page Size", [50, 100, 200, 500], index=1)
-    if st.button("Execute Filter"):
+        min_d = st.number_input("Min Depth (km)", value=-10.0, key="cat_mind")
+        max_d = st.number_input("Max Depth (km)", value=800.0, key="cat_maxd")
+    kw = st.text_input("Place keyword (not for country stats)", key="cat_kw")
+    ps = st.selectbox("Page Size", [50, 100, 200, 500], index=1, key="cat_ps")
+
+    # Build filter params (shared between Execute Filter and page changes)
+    filter_params = {
+        "start_time": f"{sd.isoformat()}T00:00:00Z",
+        "end_time": f"{ed.isoformat()}T23:59:59.999Z",
+        "min_mag": min_m, "max_mag": max_m,
+        "min_depth": min_d, "max_depth": max_d,
+        "place_keyword": kw or None,
+        "page_size": ps,
+    }
+
+    if st.button("Execute Filter", key="cat_exec"):
+        st.session_state["cat_filter_params"] = filter_params
+        st.session_state["cat_total"] = None
+
+    # If we have stored filter params, use them for pagination
+    active_params = st.session_state.get("cat_filter_params", filter_params)
+
+    if st.session_state.get("cat_filter_params") is not None or st.session_state.get("cat_total") is not None:
+        # Determine total on first load
+        if st.session_state.get("cat_total") is None:
+            try:
+                r_first = api_get("/catalog/events", params={**active_params, "page": 1})
+                st.session_state["cat_total"] = r_first["total"]
+            except RuntimeError as e:
+                st.error(str(e))
+                st.session_state["cat_total"] = 0
+
+    total = st.session_state.get("cat_total", 0)
+    if total > 0:
+        total_pages = max(1, (total + ps - 1) // ps)
+
+        # Pagination controls
+        pc1, pc2, pc3, pc4 = st.columns([1, 2, 1, 1])
+        with pc1:
+            cur_page = st.number_input(
+                "Page", min_value=1, max_value=total_pages,
+                value=1, step=1, key="cat_page",
+            )
+        with pc2:
+            st.caption(f"共 {total} 条记录，{total_pages} 页")
+        with pc3:
+            if st.button("上一页", disabled=(cur_page <= 1), key="cat_prev"):
+                st.session_state["cat_page"] = max(1, cur_page - 1)
+                st.rerun()
+        with pc4:
+            if st.button("下一页", disabled=(cur_page >= total_pages), key="cat_next"):
+                st.session_state["cat_page"] = min(total_pages, cur_page + 1)
+                st.rerun()
+
+        # Sync page input with session
+        cur_page = st.session_state.get("cat_page", 1)
+
         try:
-            r = api_get("/catalog/events", params={
-                "start_time": f"{sd.isoformat()}T00:00:00Z",
-                "end_time": f"{ed.isoformat()}T23:59:59.999Z",
-                "min_mag": min_m, "max_mag": max_m,
-                "min_depth": min_d, "max_depth": max_d,
-                "place_keyword": kw or None,
-                "page": 1, "page_size": ps,
-            })
+            r = api_get("/catalog/events", params={**active_params, "page": cur_page})
             df = pd.DataFrame(r["items"])
-            st.metric("Matching Records", r["total"])
             if not df.empty:
                 cols = [c for c in ["time", "latitude", "longitude", "depth", "mag", "magType", "place"] if c in df.columns]
                 st.dataframe(df[cols], use_container_width=True, hide_index=True)

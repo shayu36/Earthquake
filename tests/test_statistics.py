@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from task1_data_validation import read_and_prepare
+from task1.task1_data_validation import read_and_prepare
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 TEST_CSV = BASE_DIR / "USGS_2024_2025_M4.5plus_earthquakes.csv"

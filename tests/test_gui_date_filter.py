@@ -20,7 +20,7 @@ def sample_df():
             "2025-12-31T00:00:00Z",
             "2025-12-31T12:00:00Z",
             "2025-12-31T23:59:59Z",
-        ]).tz_localize("UTC"),
+        ]),  # "Z" suffix already → UTC; do NOT call .tz_localize() again
         "mag": [5.0, 5.5, 6.0, 6.5, 7.0],
         "id": ["a", "b", "c", "d", "e"],
     }

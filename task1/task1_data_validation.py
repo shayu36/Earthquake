@@ -43,7 +43,7 @@ def parse_args():
     parser.add_argument(
         "--input",
         type=Path,
-        default=BASE_DIR / "USGS_2024_2025_M4.5plus_earthquakes.csv",
+        default=BASE_DIR.parent / "USGS_2024_2025_M4.5plus_earthquakes.csv",
         help="Path to input CSV file",
     )
     parser.add_argument(
