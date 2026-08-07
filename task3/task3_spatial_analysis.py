@@ -289,7 +289,7 @@ def main():
                 "magType": True, "depth": ":.1f", "place": False,
             },
             projection="natural earth",
-            title="2024-2025 Global M4.5+ Earthquakes (sampled 5000)",
+            title="Latitude/Longitude Interactive Scatter Plot — 2024-2025 Global M4.5+ Earthquakes (sampled 5000)",
             color_continuous_scale="Viridis_r",
             size_max=15,
         )
