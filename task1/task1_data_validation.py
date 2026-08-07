@@ -3,11 +3,8 @@
 """
 Task 1: Data Reading and Quality Validation
 ============================================
-Read USGS earthquake catalog CSV, validate data ranges, uniqueness,
-numerical boundaries, and missing quality fields, then export results.
-
-Data source: USGS ANSS Comprehensive Earthquake Catalog (ComCat)
-Time range: 2024-01-01 to 2025-12-31, M >= 4.5
+Read USGS earthquake catalog CSV, validate data, add derived columns,
+and export earthquakes_prepared.csv.
 
 Usage:
     python task1_data_validation.py
@@ -25,31 +22,22 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
-# Force UTF-8 on Windows to avoid GBK encoding errors
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
-# ============================================================
-# 0. 路径与参数
-# ============================================================
 BASE_DIR = Path(__file__).resolve().parent
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Task 1: Data Reading and Quality Validation"
-    )
+    parser = argparse.ArgumentParser(description="Task 1: Data Reading and Quality Validation")
     parser.add_argument(
-        "--input",
-        type=Path,
+        "--input", type=Path,
         default=BASE_DIR.parent / "USGS_2024_2025_M4.5plus_earthquakes.csv",
         help="Path to input CSV file",
     )
     parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=BASE_DIR,
+        "--output-dir", type=Path, default=BASE_DIR,
         help="Directory for output files",
     )
     return parser.parse_args()
@@ -60,17 +48,12 @@ EXPECTED_END   = pd.Timestamp("2025-12-31T23:59:59.999Z")
 
 
 def log(msg: str, f=None):
-    """同时输出到控制台和验证日志文件。"""
     print(msg)
     if f:
         f.write(msg + "\n")
 
 
-# ============================================================
-# SHA-256 计算
-# ============================================================
 def calculate_sha256(path: Path) -> str:
-    """Dynamically compute SHA-256 hash of the input file."""
     sha256 = hashlib.sha256()
     with path.open("rb") as file:
         for block in iter(lambda: file.read(1024 * 1024), b""):
@@ -82,11 +65,33 @@ def calculate_sha256(path: Path) -> str:
 # 1. 读取 CSV
 # ============================================================
 def read_and_prepare(path: Path):
-    """读取 CSV，正确解析 time / updated 字段。"""
+    """读取 CSV，按 time 和 id 排序，添加派生字段。"""
     df = pd.read_csv(path)
     df["time"]    = pd.to_datetime(df["time"],    utc=True)
     df["updated"] = pd.to_datetime(df["updated"], utc=True)
-    df = df.sort_values("time").reset_index(drop=True)
+
+    # 按要求：按 time 升序、再按 id 升序
+    df = df.sort_values(["time", "id"], ascending=[True, True], kind="mergesort")
+    df = df.reset_index(drop=True)
+
+    # 派生字段
+    df["year"]  = df["time"].dt.year
+    df["month"] = df["time"].dt.strftime("%Y-%m")
+
+    df["mag_group"] = pd.cut(
+        df["mag"],
+        bins=[4.5, 5.0, 6.0, 7.0, np.inf],
+        labels=["[4.5,5.0)", "[5.0,6.0)", "[6.0,7.0)", "[7.0,+inf)"],
+        right=False,
+    )
+
+    df["depth_group"] = pd.cut(
+        df["depth"],
+        bins=[0, 70, 300, np.inf],
+        labels=["[0,70)", "[70,300)", "[300,+inf)"],
+        right=False,
+    )
+
     return df
 
 
@@ -97,10 +102,8 @@ def validate_ranges(df, f):
     log("\n" + "=" * 60, f)
     log("2. 数据范围验证", f)
     log("=" * 60, f)
-
     issues = []
 
-    # --- 时间范围 ---
     t_min, t_max = df["time"].min(), df["time"].max()
     log(f"  时间范围: {t_min}  ~  {t_max}", f)
     t_ok = True
@@ -113,47 +116,38 @@ def validate_ranges(df, f):
     if t_ok:
         log("  ✓ 时间范围符合要求 (2024-01-01 ~ 2025-12-31)", f)
 
-    # --- 纬度 [-90, 90] ---
     lat_ok = df["latitude"].between(-90, 90).all()
     if not lat_ok:
         bad = df[~df["latitude"].between(-90, 90)]
         msg = f"  ⚠ 纬度越界: {len(bad)} 条记录"
         issues.append(msg); log(msg, f)
-        log(f"     违规示例:\n{bad[['time','latitude']].head(3).to_string(index=False)}", f)
     else:
         log("  ✓ 纬度全部在 [-90°, 90°] 范围内", f)
 
-    # --- 经度 [-180, 180] ---
     lon_ok = df["longitude"].between(-180, 180).all()
     if not lon_ok:
         bad = df[~df["longitude"].between(-180, 180)]
         msg = f"  ⚠ 经度越界: {len(bad)} 条记录"
         issues.append(msg); log(msg, f)
-        log(f"     违规示例:\n{bad[['time','longitude']].head(3).to_string(index=False)}", f)
     else:
         log("  ✓ 经度全部在 [-180°, 180°] 范围内", f)
 
-    # --- 深度 >= 0 ---
     depth_ok = (df["depth"] >= 0).all()
     if not depth_ok:
         bad = df[df["depth"] < 0]
         msg = f"  ⚠ 深度为负: {len(bad)} 条记录"
         issues.append(msg); log(msg, f)
-        log(f"     违规示例:\n{bad[['time','depth']].head(3).to_string(index=False)}", f)
     else:
         log("  ✓ 深度全部 >= 0 km", f)
 
-    # --- 震级 >= 4.5 ---
     mag_ok = (df["mag"] >= 4.5).all()
     if not mag_ok:
         bad = df[df["mag"] < 4.5]
         msg = f"  ⚠ 震级 < 4.5: {len(bad)} 条记录"
         issues.append(msg); log(msg, f)
-        log(f"     违规示例:\n{bad[['time','mag']].head(3).to_string(index=False)}", f)
     else:
         log("  ✓ 震级全部 >= 4.5", f)
 
-    # --- type 字段 ---
     if (df["type"] == "earthquake").all():
         log("  ✓ type 字段全部为 'earthquake'", f)
     else:
@@ -161,7 +155,6 @@ def validate_ranges(df, f):
         msg = f"  ⚠ type 字段存在非 earthquake 值: {len(other)} 条"
         issues.append(msg); log(msg, f)
 
-    # --- status 字段 ---
     if (df["status"] == "reviewed").all():
         log("  ✓ status 字段全部为 'reviewed'", f)
     else:
@@ -179,10 +172,8 @@ def validate_uniqueness(df, f):
     log("\n" + "=" * 60, f)
     log("3. 记录唯一性检查", f)
     log("=" * 60, f)
-
     issues = []
 
-    # --- 完全重复行 ---
     dup_rows = df.duplicated().sum()
     if dup_rows > 0:
         msg = f"  ⚠ 存在 {dup_rows} 条完全重复记录"
@@ -190,7 +181,6 @@ def validate_uniqueness(df, f):
     else:
         log(f"  ✓ 无完全重复记录 (共 {len(df)} 条)", f)
 
-    # --- ID 唯一性 ---
     dup_ids = df["id"].duplicated().sum()
     if dup_ids > 0:
         dup_id_list = df[df["id"].duplicated(keep=False)]["id"].unique()
@@ -200,7 +190,6 @@ def validate_uniqueness(df, f):
     else:
         log(f"  ✓ {len(df)} 个 ID 全部唯一", f)
 
-    # --- 核心字段无重复 (time, latitude, longitude, depth, mag) ---
     core_cols = ["time", "latitude", "longitude", "depth", "mag"]
     dup_core = df.duplicated(subset=core_cols).sum()
     if dup_core > 0:
@@ -229,7 +218,6 @@ def validate_numerical_bounds(df, f):
     stats["missing_pct"] = (df[num_cols].isna().sum() / len(df) * 100).round(2)
     stats["count"] = stats["count"].astype(int)
 
-    # 格式化输出
     for col in num_cols:
         s = df[col]
         log(f"\n  [{col}]", f)
@@ -243,7 +231,6 @@ def validate_numerical_bounds(df, f):
         log(f"    标准差:   {s.std():.4f}", f)
 
     issues = []
-    # 检查不应为负的字段
     for col in ["depth", "mag"]:
         if col in df.columns:
             neg = (df[col] < 0).sum()
@@ -277,7 +264,8 @@ def validate_quality_missing(df, f):
             warnings_list.append(f"质量字段 {col} 缺失 {miss} 条 ({pct:.2f}%)")
 
     log("\n  --- 关键说明 ---", f)
-    log("  缺失值不得填 0（说明文件中已注明）。本次处理保留缺失值不填充。", f)
+    log("  质量字段缺失值未用 0 填补，也未因缺失而删除整条记录。", f)
+    log("  统计计算使用各字段的有效样本（逐字段 pairwise）。", f)
 
     return missing_summary, warnings_list
 
@@ -286,17 +274,15 @@ def validate_quality_missing(df, f):
 # 6. 导出结果
 # ============================================================
 def export_results(df, stats, missing_summary, output_dir):
-    """导出处理后的 CSV 和验证统计结果。"""
-    # (a) 处理后的数据
-    df_out = df.copy()
-    output_csv = output_dir / "task1_processed_data.csv"
-    df_out.to_csv(output_csv, index=False, encoding="utf-8-sig")
+    # (a) 处理后数据（含派生字段）→ earthquakes_prepared.csv
+    output_csv = output_dir / "earthquakes_prepared.csv"
+    df.to_csv(output_csv, index=False, encoding="utf-8-sig")
     print(f"\n✓ 处理后数据已导出: {output_csv}")
 
-    # (b) 缺失统计 CSV
+    # (b) 缺失统计 → validation_summary.csv
     missing_df = pd.DataFrame(missing_summary).T
     missing_df.index.name = "field"
-    missing_csv = output_dir / "task1_missing_summary.csv"
+    missing_csv = output_dir / "validation_summary.csv"
     missing_df.to_csv(missing_csv, encoding="utf-8-sig")
     print(f"✓ 缺失统计已导出: {missing_csv}")
 
@@ -314,7 +300,7 @@ def main():
     input_csv = args.input
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
-    validation_log = output_dir / "task1_validation_results.txt"
+    validation_log = output_dir / "validation_report.txt"
 
     if not input_csv.exists():
         print(f"错误: 找不到输入文件 {input_csv}")
@@ -325,16 +311,13 @@ def main():
     print("USGS 2024-2025 M4.5+ Earthquakes")
     print("=" * 60)
 
-    # 计算文件哈希
     file_sha256 = calculate_sha256(input_csv)
 
-    # 打开日志文件
     with open(validation_log, "w", encoding="utf-8") as f:
         log(f"验证时间: {pd.Timestamp.now()}", f)
         log(f"输入文件: {input_csv}", f)
         log(f"SHA-256: {file_sha256}", f)
 
-        # --- Step 1: 读取 ---
         log("\n" + "=" * 60, f)
         log("1. 读取 CSV", f)
         log("=" * 60, f)
@@ -343,29 +326,22 @@ def main():
         df = read_and_prepare(input_csv)
         log(f"  记录总数: {len(df)}", f)
         log(f"  字段数量: {len(df.columns)}", f)
-        log(f"  字段列表: {list(df.columns)}", f)
+        log(f"  新增派生字段: year, month, mag_group, depth_group", f)
+        log(f"  mag_group 分组: [4.5,5.0) [5.0,6.0) [6.0,7.0) [7.0,+inf)", f)
+        log(f"  depth_group 分组: [0,70) [70,300) [300,+inf)", f)
         log(f"  time 类型: {df['time'].dtype}", f)
         log(f"  updated 类型: {df['updated'].dtype}", f)
-        log("  ✓ time 与 updated 已正确区分为 datetime64[ns, UTC]", f)
+        log("  ✓ 已按 time, id 排序；time 与 updated 正确区分", f)
 
-        # --- Step 2: 范围验证 ---
         issues_2 = validate_ranges(df, f)
-
-        # --- Step 3: 唯一性 ---
         issues_3 = validate_uniqueness(df, f)
-
-        # --- Step 4: 数值边界 ---
         issues_4, stats = validate_numerical_bounds(df, f)
-
-        # --- Step 5: 缺失 ---
         missing_summary, quality_warnings = validate_quality_missing(df, f)
 
-        # --- 汇总 ---
         core_issues = issues_2 + issues_3 + issues_4
         log("\n" + "=" * 60, f)
         log("总  结", f)
         log("=" * 60, f)
-
         if core_issues:
             log(f"  ⚠ 核心验证共发现 {len(core_issues)} 个问题:", f)
             for i, iss in enumerate(core_issues, 1):
@@ -383,13 +359,12 @@ def main():
         log(f"\n  最终记录数: {len(df)}", f)
         log(f"  字段数: {len(df.columns)}", f)
 
-    # --- 导出 ---
     export_results(df, stats, missing_summary, output_dir)
 
     print("\n" + "=" * 60)
     print("任务 1 完成！")
     print(f"验证日志: {validation_log}")
-    print(f"处理后数据: {output_dir / 'task1_processed_data.csv'}")
+    print(f"处理后数据: {output_dir / 'earthquakes_prepared.csv'}")
     print("=" * 60)
 
 

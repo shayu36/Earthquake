@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from task5_gui_browser import filter_by_date
+from task5.task5_gui_browser import filter_by_date
 
 
 @pytest.fixture
