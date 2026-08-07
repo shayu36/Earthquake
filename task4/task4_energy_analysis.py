@@ -199,21 +199,33 @@ def main():
     plt.close()
     print(f"\n  -> Saved: task4_monthly_energy.png")
 
-    # ── Scatter: count vs energy ──
-    fig, ax = plt.subplots(figsize=(9, 7))
-    sc = ax.scatter(monthly_df["count"], monthly_df["energy_pct"],
-                    c=monthly_df["max_mag"], cmap="plasma", s=120, alpha=0.85,
-                    edgecolors="#333333", linewidth=0.5)
+    # ── Scatter: count vs energy (log scale to show all months) ──
+    fig, ax = plt.subplots(figsize=(10, 7))
+
+    # Use log10(total_energy) so the scatter is readable despite the M8.8 outlier
+    monthly_df["log_energy"] = np.log10(monthly_df["total_energy"])
+    # Color by year
+    monthly_df["plot_year"] = [m[:4] for m in months]
+    year_colors = {"2024": "#50B86A", "2025": "#E0554A"}
+
+    for yr, color in year_colors.items():
+        subset = monthly_df[monthly_df["plot_year"] == yr]
+        ax.scatter(subset["count"], subset["log_energy"],
+                   c=color, s=subset["max_mag"] * 40, alpha=0.8,
+                   edgecolors="#333333", linewidth=0.5, label=yr,
+                   zorder=3)
 
     for i, m in enumerate(months):
-        ax.annotate(m, (monthly_df["count"].iloc[i], monthly_df["energy_pct"].iloc[i]),
-                    textcoords="offset points", xytext=(6, 3), fontsize=7, alpha=0.8)
+        row = monthly_df.iloc[i]
+        ax.annotate(m.split("-")[1] if len(m.split("-")) > 1 else m,
+                    (row["count"], row["log_energy"]),
+                    textcoords="offset points", xytext=(6, 3),
+                    fontsize=7, alpha=0.75)
 
     ax.set_xlabel("Earthquake Count", fontsize=13)
-    ax.set_ylabel("Relative Energy Index (%)", fontsize=13)
-    ax.set_title("Count vs Energy by Month", fontsize=14, fontweight="bold")
-    cbar = plt.colorbar(sc, ax=ax)
-    cbar.set_label("Max Magnitude", fontsize=10)
+    ax.set_ylabel("log₁₀(Total Monthly Energy)", fontsize=13)
+    ax.set_title("Count vs Energy by Month (log scale, bubble size = max mag)", fontsize=13, fontweight="bold")
+    ax.legend(title="Year", fontsize=10)
     ax.grid(alpha=0.3, linestyle="--")
 
     plt.tight_layout()
