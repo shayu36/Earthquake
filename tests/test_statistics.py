@@ -54,7 +54,25 @@ def test_mag_bins_sum(df):
     mag_labels = ["[4.5,5.0)", "[5.0,6.0)", "[6.0,7.0)", "[7.0,+inf)"]
     df = df.copy()
     df["mag_bin"] = pd.cut(df["mag"], bins=mag_bins, labels=mag_labels, right=False)
-    assert df["mag_bin"].value_counts().sum() == 14953
+    counts = df["mag_bin"].value_counts()
+    assert counts.sum() == 14953
+    assert counts["[4.5,5.0)"] == 11318
+    assert counts["[5.0,6.0)"] == 3391
+    assert counts["[6.0,7.0)"] == 218
+    assert counts["[7.0,+inf)"] == 26
+
+
+def test_monthly_reindex_preserves_total(df):
+    """Monthly reindex with PeriodIndex must keep all records."""
+    import numpy as np
+    df = df.copy()
+    df["year_month"] = df["time"].dt.to_period("M")
+    monthly = df.groupby("year_month").size()
+    full_months = pd.period_range("2024-01", "2025-12", freq="M")
+    monthly = monthly.reindex(full_months, fill_value=0)
+    assert len(monthly) == 24
+    assert monthly.sum() == 14953
+    assert (monthly > 0).sum() == 24  # all 24 months have data
 
 
 def test_time_range_ok(df):
