@@ -140,7 +140,7 @@ def main():
             "year": yr,
             "annual_event_count": int(yr_monthly.sum()),
             "monthly_mean": round(yr_monthly.mean(), 1),
-            "monthly_median": int(yr_monthly.median()),
+            "monthly_median": round(float(yr_monthly.median()), 1),
             "monthly_max": int(yr_monthly.max()),
             "max_month": str(monthly_df.loc[yr_monthly.idxmax(), "year_month"])
                          if len(yr_monthly) > 0 else "",
@@ -286,8 +286,12 @@ def main():
     # ================================================================
     print("\n=== (6) Magnitude-Depth Cross-tab ===")
 
-    cross_count = pd.crosstab(df["mag_group"], df["depth_group"])
-    cross_pct   = pd.crosstab(df["mag_group"], df["depth_group"], normalize="index") * 100
+    cross_count = pd.crosstab(df["mag_group"], df["depth_group"]).reindex(
+        index=MAG_LABELS, columns=DEPTH_LABELS, fill_value=0,
+    )
+    cross_pct   = (
+        pd.crosstab(df["mag_group"], df["depth_group"], normalize="index") * 100
+    ).reindex(index=MAG_LABELS, columns=DEPTH_LABELS, fill_value=0.0)
 
     cross_combined = cross_count.astype(str)
     for mg in MAG_LABELS:

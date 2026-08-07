@@ -182,21 +182,20 @@ def main():
             mask = (df["latitude"] >= lat_min) & (df["latitude"] < lat_max) & \
                    (df["longitude"] >= lon_min) & (df["longitude"] < lon_max)
             cnt = mask.sum()
-            if cnt > 0:
-                sub = df[mask]
-                grid_data.append({
-                    "lat_min": lat_min, "lat_max": lat_max,
-                    "lon_min": lon_min, "lon_max": lon_max,
-                    "count": cnt,
-                    "mean_mag": round(sub["mag"].mean(), 3),
-                    "max_mag": round(sub["mag"].max(), 2),
-                    "mean_depth": round(sub["depth"].mean(), 1),
-                })
+            sub = df[mask] if cnt > 0 else df.iloc[:0]
+            grid_data.append({
+                "lat_min": lat_min, "lat_max": lat_max,
+                "lon_min": lon_min, "lon_max": lon_max,
+                "count": int(cnt),
+                "mean_mag": round(sub["mag"].mean(), 3) if cnt > 0 else None,
+                "max_mag": round(sub["mag"].max(), 2) if cnt > 0 else None,
+                "mean_depth": round(sub["depth"].mean(), 1) if cnt > 0 else None,
+            })
 
     grid_df = pd.DataFrame(grid_data)
     grid_df.to_csv(OUTPUT_DIR / "spatial_grid_count.csv", index=False, encoding="utf-8-sig")
-    nonempty = len(grid_df)
-    print(f"  Non-empty cells: {nonempty} / 648,  count sum = {grid_df['count'].sum()}")
+    nonempty = int((grid_df["count"] > 0).sum())
+    print(f"  Non-empty cells: {nonempty} / {len(grid_df)},  count sum = {grid_df['count'].sum()}")
 
     # ── Heatmap ──
     fig, ax = plt.subplots(figsize=(16, 8))
