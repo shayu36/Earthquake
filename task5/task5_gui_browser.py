@@ -52,7 +52,7 @@ def load_data(path):
     df = pd.read_csv(path)
     df["time"] = pd.to_datetime(df["time"], utc=True, format="ISO8601")
     df["year"] = df["time"].dt.year
-    df["year_month"] = df["time"].dt.to_period("M").astype(str)
+    df["year_month"] = df["time"].dt.to_period("M")  # Period objects for proper reindex
     return df
 
 
@@ -391,15 +391,16 @@ class EarthquakeBrowser:
 
         elif chart_type == "monthly":
             self.ax = self.fig.add_subplot(111)
+            self._plot_df = None  # clear scatter cache to prevent wrong click lookup
             if n > 0:
                 monthly = self.df.groupby("year_month").size()
-                full_months = pd.period_range("2024-01", "2025-12", freq="M").astype(str)
+                full_months = pd.period_range("2024-01", "2025-12", freq="M")
                 monthly = monthly.reindex(full_months, fill_value=0)
-                monthly.index = monthly.index.astype(str)
+                labels_str = monthly.index.astype(str)
                 x = np.arange(len(monthly))
                 self.ax.bar(x, monthly.values, width=0.6, color="#4A90D9", alpha=0.85)
                 self.ax.set_xticks(x[::2])
-                self.ax.set_xticklabels(monthly.index[::2], rotation=45, ha="right", fontsize=8)
+                self.ax.set_xticklabels(labels_str[::2], rotation=45, ha="right", fontsize=8)
                 self.ax.set_ylabel("Count", fontsize=9)
             else:
                 self.ax.text(0.5, 0.5, "No data", transform=self.ax.transAxes, ha="center", va="center")
@@ -450,7 +451,9 @@ class EarthquakeBrowser:
 
     # ── Click / Select ──
     def _on_scatter_click(self, event):
-        if event.inaxes != self.ax or not hasattr(self, "_plot_df"):
+        if self.var_chart.get() != "scatter":
+            return
+        if event.inaxes != self.ax or not hasattr(self, "_plot_df") or self._plot_df is None:
             return
         if event.xdata is None or event.ydata is None:
             return

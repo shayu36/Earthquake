@@ -28,7 +28,16 @@ async def upload_catalog(file: UploadFile = File(...)):
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    # Step 2: Only after validation passes, write to disk
+    # Step 2: Only write to disk if verification passed
+    if not verification.get("verification_passed", False):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "CSV verification failed — data not saved.",
+                "verification": verification,
+            },
+        )
+
     RAW_CSV_PATH.write_bytes(content)
     catalog_service.save_processed()
 

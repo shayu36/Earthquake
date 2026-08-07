@@ -104,6 +104,16 @@ def run_haversine_dbscan(coords_rad, eps_km, min_samples):
     return db.fit_predict(coords_rad)
 
 
+def circular_mean_longitude(longitude: pd.Series) -> float:
+    """Circular mean of longitudes, correct across ±180° date line."""
+    angles = np.radians(longitude.dropna().to_numpy())
+    if len(angles) == 0:
+        return float("nan")
+    mean_sin = np.sin(angles).mean()
+    mean_cos = np.cos(angles).mean()
+    return float(np.degrees(np.arctan2(mean_sin, mean_cos)))
+
+
 def cluster_stats(labels, df):
     """Compute per-cluster statistics."""
     rows = []
@@ -119,7 +129,7 @@ def cluster_stats(labels, df):
             "mean_mag": round(sub["mag"].mean(), 2),
             "max_mag": round(sub["mag"].max(), 1),
             "mean_depth": round(sub["depth"].mean(), 1),
-            "center_lon": round(sub["longitude"].mean(), 1),
+            "center_lon": round(circular_mean_longitude(sub["longitude"]), 1),
             "center_lat": round(sub["latitude"].mean(), 1),
             "time_start": str(sub["time"].min().date()),
             "time_end": str(sub["time"].max().date()),
