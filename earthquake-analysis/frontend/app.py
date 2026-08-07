@@ -21,7 +21,20 @@ for sub in ["csv", "png", "html"]:
     (OUT_DIR / sub).mkdir(parents=True, exist_ok=True)
 
 st.set_page_config(page_title="Global M4.5+ Earthquake Analysis", layout="wide")
-API_BASE = st.sidebar.text_input("FastAPI Address", value="http://127.0.0.1:8000/api/v1")
+
+import os
+API_BASE = os.getenv(
+    "EARTHQUAKE_API_BASE",
+    "http://127.0.0.1:8000/api/v1",
+)
+# Allow override via sidebar in dev mode
+_dev_override = st.sidebar.text_input(
+    "FastAPI Address (dev override)",
+    value=API_BASE,
+    disabled=(os.getenv("EARTHQUAKE_API_BASE", "") == ""),
+)
+if _dev_override != API_BASE:
+    API_BASE = _dev_override
 
 
 NO_PROXY = {"http": None, "https": None}  # bypass system proxy for localhost
