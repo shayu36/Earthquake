@@ -199,34 +199,60 @@ def main():
     plt.close()
     print(f"\n  -> Saved: task4_monthly_energy.png")
 
-    # ── Scatter: count vs energy (log scale to show all months) ──
-    fig, ax = plt.subplots(figsize=(10, 7))
-
-    # Use log10(total_energy) so the scatter is readable despite the M8.8 outlier
-    monthly_df["log_energy"] = np.log10(monthly_df["total_energy"])
-    # Color by year
+    # ── Scatter: count vs mean energy per event ──
+    # Using mean_energy_per_event instead of total_energy avoids the
+    # M8.8 outlier dominating the y-axis and spreads all 24 months out.
+    monthly_df["mean_energy_per_event"] = monthly_df["total_energy"] / monthly_df["count"]
     monthly_df["plot_year"] = [m[:4] for m in months]
+
+    fig, ax = plt.subplots(figsize=(12, 7))
+
     year_colors = {"2024": "#50B86A", "2025": "#E0554A"}
 
     for yr, color in year_colors.items():
         subset = monthly_df[monthly_df["plot_year"] == yr]
-        ax.scatter(subset["count"], subset["log_energy"],
-                   c=color, s=subset["max_mag"] * 40, alpha=0.8,
-                   edgecolors="#333333", linewidth=0.5, label=yr,
-                   zorder=3)
+        ax.scatter(
+            subset["count"], subset["mean_energy_per_event"],
+            c=color, s=subset["count"] / 3, alpha=0.75,
+            edgecolors="#333333", linewidth=0.5,
+            label=f"{yr}  ({len(subset)} months)",
+            zorder=3,
+        )
 
+    # Smart labels: only label notable months to avoid clutter
+    outlier_threshold = monthly_df["mean_energy_per_event"].quantile(0.85)
     for i, m in enumerate(months):
         row = monthly_df.iloc[i]
-        ax.annotate(m.split("-")[1] if len(m.split("-")) > 1 else m,
-                    (row["count"], row["log_energy"]),
-                    textcoords="offset points", xytext=(6, 3),
-                    fontsize=7, alpha=0.75)
+        label = m  # full "2024-01" format
+        is_notable = (
+            row["mean_energy_per_event"] >= outlier_threshold
+            or row["count"] >= monthly_df["count"].quantile(0.80)
+        )
+        if is_notable:
+            ax.annotate(label,
+                        (row["count"], row["mean_energy_per_event"]),
+                        textcoords="offset points", xytext=(8, 6),
+                        fontsize=8, fontweight="bold",
+                        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.7))
+        else:
+            ax.annotate(label.split("-")[1],
+                        (row["count"], row["mean_energy_per_event"]),
+                        textcoords="offset points", xytext=(5, 3),
+                        fontsize=6.5, alpha=0.55)
+
+    # Highlight 2025-07 (the peak on both axes)
+    peak = monthly_df.loc["2025-07"]
+    ax.annotate("★ 2025-07: M8.8\n  peak count + peak energy",
+                (peak["count"], peak["mean_energy_per_event"]),
+                textcoords="offset points", xytext=(15, -25),
+                fontsize=9, color="#C0392B", fontweight="bold",
+                arrowprops=dict(arrowstyle="->", color="#C0392B", lw=1.5))
 
     ax.set_xlabel("Earthquake Count", fontsize=13)
-    ax.set_ylabel("log₁₀(Total Monthly Energy)", fontsize=13)
-    ax.set_title("Count vs Energy by Month (log scale, bubble size = max mag)", fontsize=13, fontweight="bold")
-    ax.legend(title="Year", fontsize=10)
-    ax.grid(alpha=0.3, linestyle="--")
+    ax.set_ylabel("Mean Energy per Event  (total_energy / count)", fontsize=13)
+    ax.set_title("Count vs Mean Energy per Event — 2024 vs 2025", fontsize=14, fontweight="bold")
+    ax.legend(fontsize=10, loc="lower right")
+    ax.grid(alpha=0.25, linestyle="--")
 
     plt.tight_layout()
     fig.savefig(OUTPUT_DIR / "task4_count_vs_energy.png", dpi=200, bbox_inches="tight")
