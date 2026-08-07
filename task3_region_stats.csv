@@ -1,0 +1,4 @@
+﻿region,lon_range,lat_range,count,mean_mag,max_mag,mean_depth_km,max_depth_km
+Region A: Japan Trench,130~140,30~40,199,4.844,7.5,65.5,442.1
+Region B: Pacific Ring - S. America,-80~-70,-35~-25,94,4.8,6.4,43.5,121.7
+Region C: Southeast Asia - Indonesia,95~105,-10~0,144,4.79,5.8,45.4,198.4
